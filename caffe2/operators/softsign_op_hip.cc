@@ -23,48 +23,42 @@
 namespace caffe2 {
 
 template <typename T>
-__global__ void AbsKernel(const int N, const T* X, T* Y) {
+__global__ void SoftsignKernel(const int N, const T* X, T* Y) {
   HIP_1D_KERNEL_LOOP(i, N) {
-    Y[i] = fabs(X[i]);
+    Y[i] = X[i] / (1 + abs(X[i]));
   }
 }
 
 template <typename T>
-__global__ void AbsGradientKernel(const int N, const T* X, const T* dY, T* dX) {
+__global__ void SoftsignGradientKernel(const int N, const T* x, const T* dy,
+                              T* dx) {
   HIP_1D_KERNEL_LOOP(i, N) {
-    dX[i] = X[i] == T(0) ? T(0) : (X[i] > T(0) ? dY[i] : -dY[i]);
+    dx[i] = dy[i] / pow(1 + abs(x[i]), 2);
   }
 }
 
-struct AbsHIPFunctor {
+struct SoftsignHIPFunctor {
   template <typename T>
   inline void
   operator()(const int n, const T* x, T* y, HIPContext* device_context) {
-    hipLaunchKernelGGL((AbsKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, y);
+    hipLaunchKernelGGL((SoftsignKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, y);
     return;
   }
 };
 
-struct AbsGradientHIPFunctor {
+struct SoftsignGradientHIPFunctor {
   template <typename T>
-  inline void Run(
-      const int n,
-      const T* x,
-      const T* dy,
-      T* dx,
-      HIPContext* device_context) {
-    hipLaunchKernelGGL((AbsGradientKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, dy, dx);
+  inline void
+  Run(const int n, const T* x, const T* dy, T* dx, HIPContext* device_context) {
+    hipLaunchKernelGGL((SoftsignGradientKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, dy, dx);
     return;
   }
 };
 
 REGISTER_HIP_OPERATOR(
-    Abs,
-    UnaryElementwiseOp<TensorTypes<float>, HIPContext, AbsHIPFunctor>);
+    Softsign,
+    UnaryElementwiseOp<TensorTypes<float>, HIPContext, SoftsignHIPFunctor>);
 REGISTER_HIP_OPERATOR(
-    AbsGradient,
-    BinaryElementwiseOp<
-        TensorTypes<float>,
-        HIPContext,
-        WithoutBroadcast<AbsGradientHIPFunctor>>);
+    SoftsignGradient,
+    BinaryElementwiseOp<TensorTypes<float>, HIPContext, WithoutBroadcast<SoftsignGradientHIPFunctor>>);
 } // namespace caffe2

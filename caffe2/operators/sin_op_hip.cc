@@ -23,29 +23,29 @@
 namespace caffe2 {
 
 template <typename T>
-__global__ void AbsKernel(const int N, const T* X, T* Y) {
+__global__ void SinKernel(const int N, const T* X, T* Y) {
   HIP_1D_KERNEL_LOOP(i, N) {
-    Y[i] = fabs(X[i]);
+    Y[i] = sin(X[i]);
   }
 }
 
 template <typename T>
-__global__ void AbsGradientKernel(const int N, const T* X, const T* dY, T* dX) {
+__global__ void SinGradientKernel(const int N, const T* X, const T* dY, T* dX) {
   HIP_1D_KERNEL_LOOP(i, N) {
-    dX[i] = X[i] == T(0) ? T(0) : (X[i] > T(0) ? dY[i] : -dY[i]);
+    dX[i] = dY[i] * cos(X[i]);
   }
 }
 
-struct AbsHIPFunctor {
+struct SinHIPFunctor {
   template <typename T>
   inline void
   operator()(const int n, const T* x, T* y, HIPContext* device_context) {
-    hipLaunchKernelGGL((AbsKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, y);
+    hipLaunchKernelGGL((SinKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, y);
     return;
   }
 };
 
-struct AbsGradientHIPFunctor {
+struct SinGradientHIPFunctor {
   template <typename T>
   inline void Run(
       const int n,
@@ -53,18 +53,18 @@ struct AbsGradientHIPFunctor {
       const T* dy,
       T* dx,
       HIPContext* device_context) {
-    hipLaunchKernelGGL((AbsGradientKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, dy, dx);
+    hipLaunchKernelGGL((SinGradientKernel<T>), dim3(CAFFE_GET_BLOCKS(n)), dim3(CAFFE_HIP_NUM_THREADS), 0, device_context->hip_stream(), n, x, dy, dx);
     return;
   }
 };
 
 REGISTER_HIP_OPERATOR(
-    Abs,
-    UnaryElementwiseOp<TensorTypes<float>, HIPContext, AbsHIPFunctor>);
+    Sin,
+    UnaryElementwiseOp<TensorTypes<float>, HIPContext, SinHIPFunctor>);
 REGISTER_HIP_OPERATOR(
-    AbsGradient,
+    SinGradient,
     BinaryElementwiseOp<
         TensorTypes<float>,
         HIPContext,
-        WithoutBroadcast<AbsGradientHIPFunctor>>);
+        WithoutBroadcast<SinGradientHIPFunctor>>);
 } // namespace caffe2
